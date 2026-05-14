@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: demand-pulse
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: DEMAND_BETA_OPEN
+        value: true
+      - key: DEMAND_QUERIES_PER_SCAN
+        value: 8
+      - key: DEMAND_MIN_RELEVANCE
+        value: 24
+      - key: DATABASE_URL
+        sync: false
+      - key: BRAVE_API_KEY
+        sync: false

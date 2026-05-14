@@ -1,0 +1,24 @@
+{
+  "name": "demand-pulse",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Free-beta SaaS for mining audience demand and turning real questions into a content calendar.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node tests/core.test.js",
+    "check": "node --check src/server.js && node --check src/db.js && node --check src/scanner.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "postgres": "^3.4.9"
+  },
+  "devDependencies": {}
+}

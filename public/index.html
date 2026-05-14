@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Demand Pulse — Free Beta</title>
+  <style>
+    :root { --ink:#161616; --muted:#666; --line:#e7e2d8; --paper:#fffdf8; --soft:#f4efe5; --accent:#126c5a; }
+    * { box-sizing:border-box; } body { margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color:var(--ink); background:var(--paper); }
+    .wrap { max-width:1120px; margin:0 auto; padding:0 24px; }
+    header { height:70px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); }
+    .brand { font-weight:850; font-size:18px; } .brand span { color:var(--accent); }
+    .btn { border:1px solid var(--ink); background:var(--ink); color:#fff; padding:11px 16px; border-radius:7px; text-decoration:none; font-weight:750; font-size:14px; display:inline-flex; justify-content:center; }
+    .btn.alt { background:transparent; color:var(--ink); border-color:var(--line); }
+    .hero { min-height:calc(100vh - 70px); display:grid; grid-template-columns:1.05fr .95fr; gap:48px; align-items:center; padding:52px 0 64px; }
+    h1 { font-size:clamp(42px, 6vw, 76px); line-height:.96; margin:0 0 22px; letter-spacing:0; }
+    .lead { font-size:20px; line-height:1.55; color:#3f3c37; max-width:650px; margin-bottom:26px; }
+    .proof { display:flex; flex-wrap:wrap; gap:10px; margin-top:28px; }
+    .pill { border:1px solid var(--line); background:#fff; border-radius:999px; padding:8px 11px; font-size:13px; color:#4f4b45; }
+    .panel { background:#fff; border:1px solid var(--line); border-radius:8px; box-shadow:0 18px 50px rgba(30,24,12,.08); padding:24px; }
+    .row { display:grid; grid-template-columns:1fr 72px; gap:12px; align-items:center; border:1px solid var(--line); padding:13px; border-radius:7px; margin-bottom:12px; }
+    .row b { font-size:14px; } .row small { color:var(--muted); display:block; margin-top:3px; } .score { color:var(--accent); font-weight:850; text-align:right; }
+    section { padding:70px 0; border-top:1px solid var(--line); } h2 { font-size:34px; margin:0 0 18px; }
+    .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; } .card { background:#fff; border:1px solid var(--line); border-radius:8px; padding:20px; }
+    .card h3 { margin:0 0 8px; font-size:18px; } .card p, p.muted { margin:0; color:var(--muted); line-height:1.5; }
+    form { display:grid; gap:10px; margin-top:14px; } input, textarea { width:100%; border:1px solid var(--line); border-radius:7px; padding:12px; font:inherit; background:var(--paper); }
+    textarea { min-height:86px; resize:vertical; } .msg { min-height:20px; color:var(--accent); font-size:14px; }
+    @media (max-width:860px) { .hero, .grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <header class="wrap">
+    <div class="brand">Demand <span>Pulse</span></div>
+    <nav style="display:flex;gap:10px"><a class="btn alt" href="/app">Sign in</a><a class="btn" href="#beta">Join free beta</a></nav>
+  </header>
+  <main class="wrap">
+    <div class="hero">
+      <div>
+        <h1>Know what your buyers are asking before you publish.</h1>
+        <p class="lead">Demand Pulse scans Reddit, Quora, X, Facebook, and search for real audience questions, clusters them by pain point, and turns them into a weekly content calendar.</p>
+        <div style="display:flex;gap:12px;flex-wrap:wrap"><a class="btn" href="#beta">Get free beta access</a><a class="btn alt" href="/app">Open app</a></div>
+        <div class="proof"><span class="pill">Real source posts</span><span class="pill">Topic clusters</span><span class="pill">Content ideas</span><span class="pill">Free beta</span></div>
+      </div>
+      <div class="panel">
+        <div class="row"><div><b>Pricing objections</b><small>“Is this worth it for a small business?”</small></div><div class="score">91</div></div>
+        <div class="row"><div><b>Local recommendations</b><small>“Looking for a trusted consultant near me.”</small></div><div class="score">84</div></div>
+        <div class="row"><div><b>Comparison questions</b><small>“How do I choose between options?”</small></div><div class="score">76</div></div>
+        <p class="muted">Each cluster links back to source posts and can become a blog, reel, short, answer, or LinkedIn post.</p>
+      </div>
+    </div>
+    <section>
+      <h2>What beta users get</h2>
+      <div class="grid">
+        <div class="card"><h3>Audience question mining</h3><p>Workspace-specific searches based on your niche, services, geography, and competitors.</p></div>
+        <div class="card"><h3>Topic clusters</h3><p>See repeated pain points, volume, recency, source mix, and priority.</p></div>
+        <div class="card"><h3>Content calendar</h3><p>Turn live questions into planned, drafting, scheduled, and published content.</p></div>
+      </div>
+    </section>
+    <section id="beta">
+      <div class="panel" style="max-width:720px">
+        <h2>Join the free beta</h2>
+        <p class="muted">Use it free while we learn from early users. No card required.</p>
+        <form id="beta-form">
+          <input name="name" placeholder="Your name" required>
+          <input name="email" type="email" placeholder="Email" required>
+          <input name="business_type" placeholder="Business type, e.g. agency, clinic, coach">
+          <input name="website" placeholder="Website">
+          <textarea name="goal" placeholder="What kind of content or leads do you want to improve?"></textarea>
+          <button class="btn" type="submit">Request access</button>
+          <div class="msg" id="msg"></div>
+        </form>
+      </div>
+    </section>
+  </main>
+  <script>
+    document.getElementById('beta-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const msg = document.getElementById('msg');
+      const body = Object.fromEntries(new FormData(event.currentTarget).entries());
+      msg.textContent = 'Saving...';
+      const res = await fetch('/api/beta/signup', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body) });
+      msg.textContent = res.ok ? 'You are on the beta list. You can create your free account now.' : 'Could not save that. Please try again.';
+      if (res.ok) setTimeout(() => location.href = '/app', 900);
+    });
+  </script>
+</body>
+</html>
