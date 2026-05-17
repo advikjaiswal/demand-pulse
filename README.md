@@ -77,7 +77,7 @@ DATABASE_URL=postgresql://...
 DEMAND_BETA_OPEN=true
 ```
 
-Recommended:
+Optional:
 
 ```bash
 APP_URL=https://your-render-app.onrender.com
@@ -131,7 +131,9 @@ docker run -p 3000:3000 --env-file .env demand-pulse
 
 Reddit works without an API key.
 
-For X, Quora, and Facebook discovery through web search, set one of:
+If you do not set a search API key, Demand Pulse falls back to DuckDuckGo HTML search. This is good enough for early beta testing, but it is slower and less predictable than a paid/search API.
+
+For better X, Quora, and Facebook discovery through web search, set one of:
 
 ```bash
 BRAVE_API_KEY=
@@ -144,7 +146,7 @@ GOOGLE_CSE_API_KEY=
 GOOGLE_CSE_ID=
 ```
 
-Brave is the simplest beta path.
+Brave is the simplest paid/API path once you have a card. Until then, leave the keys blank.
 
 ## Beta Notes
 

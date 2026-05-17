@@ -1,10 +1,12 @@
-const axios = require('axios');
-
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+function http() {
+  return require('axios');
+}
 
 async function searchReddit(query, { limit = 10 } = {}) {
   const url = 'https://www.reddit.com/search.json';
-  const response = await axios.get(url, {
+  const response = await http().get(url, {
     params: { q: query, sort: 'new', t: 'month', limit },
     headers: { 'User-Agent': 'DemandPulseBeta/0.1' },
     timeout: 15000
@@ -36,11 +38,11 @@ async function webSearch(query, { siteFilter, count = 10 } = {}) {
   const fullQuery = siteFilter ? `site:${siteFilter} ${query}` : query;
   if (process.env.BRAVE_API_KEY) return braveSearch(fullQuery, count);
   if (process.env.GOOGLE_CSE_API_KEY && process.env.GOOGLE_CSE_ID) return googleCse(fullQuery, count);
-  return [];
+  return duckDuckGoHtml(fullQuery, count);
 }
 
 async function braveSearch(query, count) {
-  const response = await axios.get('https://api.search.brave.com/res/v1/web/search', {
+  const response = await http().get('https://api.search.brave.com/res/v1/web/search', {
     params: { q: query, count },
     headers: { Accept: 'application/json', 'X-Subscription-Token': process.env.BRAVE_API_KEY },
     timeout: 15000
@@ -53,7 +55,7 @@ async function braveSearch(query, count) {
 }
 
 async function googleCse(query, count) {
-  const response = await axios.get('https://www.googleapis.com/customsearch/v1', {
+  const response = await http().get('https://www.googleapis.com/customsearch/v1', {
     params: { key: process.env.GOOGLE_CSE_API_KEY, cx: process.env.GOOGLE_CSE_ID, q: query, num: Math.min(count, 10) },
     timeout: 15000
   });
@@ -62,6 +64,70 @@ async function googleCse(query, count) {
     url: r.link,
     snippet: r.snippet || ''
   }));
+}
+
+async function duckDuckGoHtml(query, count) {
+  const response = await http().get('https://html.duckduckgo.com/html/', {
+    params: { q: query },
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DemandPulseBeta/0.1)' },
+    timeout: 15000
+  });
+  return parseDuckDuckGoHtml(response.data || '').slice(0, count);
+}
+
+function decodeHtml(value) {
+  return String(value || '')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
+function stripTags(value) {
+  return decodeHtml(String(value || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+}
+
+function extractDuckDuckGoUrl(href) {
+  const decoded = decodeHtml(href);
+  if (decoded.startsWith('//duckduckgo.com/l/?')) {
+    try {
+      const url = new URL(`https:${decoded}`);
+      return url.searchParams.get('uddg') || null;
+    } catch (_) {
+      return null;
+    }
+  }
+  if (decoded.startsWith('/l/?')) {
+    try {
+      const url = new URL(`https://duckduckgo.com${decoded}`);
+      return url.searchParams.get('uddg') || null;
+    } catch (_) {
+      return null;
+    }
+  }
+  if (/^https?:\/\//i.test(decoded) && !decoded.includes('duckduckgo.com')) return decoded;
+  return null;
+}
+
+function parseDuckDuckGoHtml(html) {
+  const results = [];
+  const blocks = String(html || '').split(/<div class="result(?:__body)?"/i);
+  for (const block of blocks) {
+    const linkMatch = block.match(/<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
+    if (!linkMatch) continue;
+    const url = extractDuckDuckGoUrl(linkMatch[1]);
+    if (!url) continue;
+    const snippetMatch = block.match(/<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/i)
+      || block.match(/<div[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/div>/i);
+    results.push({
+      title: stripTags(linkMatch[2]),
+      url,
+      snippet: snippetMatch ? stripTags(snippetMatch[1]) : ''
+    });
+  }
+  return results;
 }
 
 function resultToProspect(result, platform) {
@@ -104,4 +170,4 @@ async function searchWebPlatform(platform, query) {
   return results.map(r => resultToProspect(r, platform)).filter(Boolean);
 }
 
-module.exports = { sleep, searchReddit, searchWebPlatform };
+module.exports = { sleep, searchReddit, searchWebPlatform, parseDuckDuckGoHtml };

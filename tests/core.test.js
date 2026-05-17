@@ -2,6 +2,7 @@ const assert = require('assert');
 const { hashPassword, verifyPassword, normalizeEmail } = require('../src/auth');
 const { parseWorkspace, buildQueries } = require('../src/keywords');
 const { scorePost, enrichPost } = require('../src/score');
+const { parseDuckDuckGoHtml } = require('../src/sources');
 
 const hash = hashPassword('correct horse battery staple');
 assert(verifyPassword('correct horse battery staple', hash));
@@ -38,5 +39,15 @@ assert.strictEqual(enriched.quality, 'hot');
 assert.strictEqual(enriched.is_question, true);
 assert(enriched.pain_point.includes('Looking for IVF'));
 assert.strictEqual(scorePost({ post_title: 'IVF jobs in Bangalore', post_body: '' }, workspace), 0);
+
+const ddg = parseDuckDuckGoHtml(`
+  <div class="result">
+    <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.quora.com%2FHow-do-I-choose-an-IVF-clinic">How do I choose an IVF clinic?</a>
+    <a class="result__snippet">People compare cost, trust, and doctor experience.</a>
+  </div>
+`);
+assert.strictEqual(ddg.length, 1);
+assert.strictEqual(ddg[0].url, 'https://www.quora.com/How-do-I-choose-an-IVF-clinic');
+assert(ddg[0].title.includes('IVF clinic'));
 
 console.log('core tests passed');
