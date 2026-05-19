@@ -19,6 +19,7 @@ async function runScan(workspaceId, { queryLimit = QUERY_LIMIT, minRelevance = M
 
   try {
     const queries = buildQueries(workspace, { limit: queryLimit });
+    const feedback = await db.getFeedbackAdjustments(workspace.id).catch(() => []);
     const sources = ['reddit', 'x', 'quora', 'facebook'];
     for (const source of sources) {
       out.source_counts[source] = 0;
@@ -27,7 +28,7 @@ async function runScan(workspaceId, { queryLimit = QUERY_LIMIT, minRelevance = M
           const posts = await collect(source, query);
           out.found += posts.length;
           for (const post of posts) {
-            const enriched = enrichPost(post, workspace, query);
+            const enriched = applyFeedback(enrichPost(post, workspace, query), feedback);
             if (enriched.relevance < minRelevance) {
               out.skipped++;
               continue;
@@ -48,6 +49,25 @@ async function runScan(workspaceId, { queryLimit = QUERY_LIMIT, minRelevance = M
     await db.finishScanRun(run.id, { status: 'failed', ...out });
     throw err;
   }
+}
+
+function applyFeedback(post, feedback) {
+  const topicLabels = feedback.filter(f => f.target_type === 'topic' && f.target_id === null);
+  const useful = ['useful', 'good_for_content', 'good_lead'];
+  const bad = ['not_useful', 'too_broad', 'wrong_topic', 'spam', 'duplicate'];
+  let adjustment = 0;
+  for (const item of topicLabels) {
+    if (useful.includes(item.label)) adjustment += Math.min(item.count * 2, 10);
+    if (bad.includes(item.label)) adjustment -= Math.min(item.count * 3, 18);
+  }
+  if (!adjustment) return post;
+  const relevance = Math.max(0, Math.min(100, post.relevance + adjustment));
+  return {
+    ...post,
+    relevance,
+    quality: relevance >= 65 ? 'hot' : relevance >= 35 ? 'warm' : 'cold',
+    is_best: post.is_best && relevance >= 30
+  };
 }
 
 module.exports = { runScan };

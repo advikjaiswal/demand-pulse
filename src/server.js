@@ -71,6 +71,7 @@ function ideas(topic, prospects = []) {
   const questions = prospects.filter(p => p.is_question).slice(0, 6);
   const first = questions[0] || prospects[0];
   const pain = first?.pain_point || first?.post_title || `${label} questions your buyers are asking`;
+  const service = first?.service_match || 'your core offer';
   return [
     {
       topic,
@@ -78,7 +79,9 @@ function ideas(topic, prospects = []) {
       format: 'blog',
       title: `${label}: ${questions.length || prospects.length} Real Questions To Answer This Week`,
       hook: `Use the exact language your audience is already using: "${String(pain).slice(0, 120)}"`,
-      outline: questions.map(q => `Answer: ${q.pain_point || q.post_title}`).join('\n') || 'Explain the problem\nShow the common mistake\nGive a practical next step\nAdd a soft CTA'
+      outline: questions.map(q => `Answer: ${q.pain_point || q.post_title}`).join('\n') || 'Explain the problem\nShow the common mistake\nGive a practical next step\nAdd a soft CTA',
+      cta: first?.cta || `Invite readers to explore ${service}`,
+      confidence: first?.confidence || 60
     },
     {
       topic,
@@ -86,7 +89,9 @@ function ideas(topic, prospects = []) {
       format: 'reel',
       title: `60-second answer: ${String(pain).slice(0, 80)}`,
       hook: 'Open with the real question, answer one misconception, close with a simple CTA.',
-      outline: 'Hook: read the question\nContext: why people ask this\nAnswer: one clear recommendation\nCTA: invite a reply or booking'
+      outline: 'Hook: read the question\nContext: why people ask this\nAnswer: one clear recommendation\nCTA: invite a reply or booking',
+      cta: first?.cta || 'Ask viewers to DM their question',
+      confidence: first?.confidence || 60
     },
     {
       topic,
@@ -94,9 +99,33 @@ function ideas(topic, prospects = []) {
       format: 'linkedin_post',
       title: `What buyers misunderstand about ${label.toLowerCase()}`,
       hook: 'Turn repeated confusion into an authority-building post.',
-      outline: 'Misconception\nWhat is actually true\nExample from the market\nPractical advice'
+      outline: 'Misconception\nWhat is actually true\nExample from the market\nPractical advice',
+      cta: first?.cta || `Offer a simple next step for ${service}`,
+      confidence: first?.confidence || 60
     }
   ];
+}
+
+function enrichCluster(cluster) {
+  const intense = cluster.emotional_intensity || 0;
+  const intent = cluster.buyer_intent_level || 0;
+  const trend = cluster.count >= 6 || intense >= 70 ? 'rising' : cluster.count >= 3 ? 'steady' : 'emerging';
+  return {
+    ...cluster,
+    label: topicLabel(cluster.topic),
+    priority: priority(cluster),
+    trend_direction: trend,
+    recommended_content: [
+      intense >= 55 ? '1 emotional reel' : '1 educational post',
+      intent >= 55 ? '1 decision-stage blog' : '1 awareness blog',
+      '1 Quora-style answer'
+    ].join(', ')
+  };
+}
+
+function csvEscape(value) {
+  const text = String(value ?? '');
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 app.get('/health', (_req, res) => res.json({ ok: true, app: 'demand-pulse' }));
@@ -186,7 +215,7 @@ app.get('/api/workspaces/:workspaceId/overview', requireAuth, loadWorkspace, asy
   ]);
   res.json({
     workspace: req.workspace,
-    topics: topics.map(t => ({ ...t, label: topicLabel(t.topic), priority: priority(t) })),
+    topics: topics.map(enrichCluster),
     prospects,
     calendar,
     scans
@@ -203,7 +232,8 @@ app.get('/api/workspaces/:workspaceId/prospects', requireAuth, loadWorkspace, as
     topic: req.query.topic || null,
     quality: req.query.quality || null,
     days: parseInt(req.query.days, 10) || 14,
-    limit: Math.min(parseInt(req.query.limit, 10) || 100, 500)
+    limit: Math.min(parseInt(req.query.limit, 10) || 100, 500),
+    bestOnly: req.query.raw === '1' || req.query.best === 'false' ? false : true
   }));
 });
 
@@ -211,6 +241,38 @@ app.get('/api/workspaces/:workspaceId/ideas', requireAuth, loadWorkspace, async 
   const topic = req.query.topic || 'general';
   const prospects = await db.getProspects(req.workspace.id, { topic, days: parseInt(req.query.days, 10) || 14, limit: 30 });
   res.json(ideas(topic, prospects));
+});
+
+app.get('/api/workspaces/:workspaceId/export.csv', requireAuth, loadWorkspace, async (req, res) => {
+  const prospects = await db.getProspects(req.workspace.id, { days: parseInt(req.query.days, 10) || 30, limit: 500, bestOnly: true });
+  const header = ['topic', 'final_score', 'pain_score', 'buyer_intent_score', 'post_type', 'pain_point', 'intent', 'audience_segment', 'service_match', 'content_angle', 'recommended_format', 'cta', 'source_url'];
+  const rows = prospects.map(p => header.map(key => csvEscape(key === 'source_url' ? p.post_url : p[key])).join(','));
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="demand-pulse-insights.csv"');
+  res.send([header.join(','), ...rows].join('\n'));
+});
+
+app.get('/api/workspaces/:workspaceId/export.md', requireAuth, loadWorkspace, async (req, res) => {
+  const topics = (await db.getTopics(req.workspace.id, { days: parseInt(req.query.days, 10) || 30 })).map(enrichCluster);
+  const prospects = await db.getProspects(req.workspace.id, { days: parseInt(req.query.days, 10) || 30, limit: 30, bestOnly: true });
+  const lines = [`# Demand Pulse Report — ${req.workspace.name}`, ''];
+  for (const topic of topics) {
+    lines.push(`## ${topic.label}`);
+    lines.push(`Posts: ${topic.count} · Engagement: ${topic.total_engagement || 0} · Intent: ${topic.buyer_intent_level || 0} · Trend: ${topic.trend_direction}`);
+    lines.push(`Repeated question: ${topic.best_repeated_question || 'Not enough data yet'}`);
+    lines.push(`Recommended: ${topic.recommended_content}`);
+    lines.push('');
+  }
+  lines.push('## Best Content Opportunities', '');
+  for (const p of prospects.slice(0, 12)) {
+    lines.push(`### ${p.content_angle || p.post_title}`);
+    lines.push(`Pain: ${p.pain_point || p.post_title}`);
+    lines.push(`Intent: ${p.intent || 'Unknown'} · Format: ${p.recommended_format || 'Post'}`);
+    lines.push(`CTA: ${p.cta || 'Add a soft CTA'}`);
+    lines.push(`Source: ${p.post_url}`);
+    lines.push('');
+  }
+  res.type('text/markdown').send(lines.join('\n'));
 });
 
 app.get('/api/workspaces/:workspaceId/calendar', requireAuth, loadWorkspace, async (req, res) => {
@@ -235,12 +297,16 @@ app.delete('/api/workspaces/:workspaceId/calendar/:id', requireAuth, loadWorkspa
 });
 
 app.post('/api/feedback', requireAuth, async (req, res) => {
-  const message = String(req.body?.message || '').trim();
+  const label = String(req.body?.label || '').trim();
+  const message = String(req.body?.message || label || '').trim();
   if (!message) return res.status(400).json({ error: 'Feedback message required' });
   res.json(await db.saveFeedback({
     user_id: req.user.id,
     workspace_id: req.body?.workspace_id ? parseInt(req.body.workspace_id, 10) : null,
     rating: req.body?.rating ? parseInt(req.body.rating, 10) : null,
+    target_type: req.body?.target_type || null,
+    target_id: req.body?.target_id ? parseInt(req.body.target_id, 10) : null,
+    label: label || null,
     message,
     page: req.body?.page || null
   }));

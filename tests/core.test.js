@@ -26,8 +26,8 @@ assert(queries.some(q => q.toLowerCase().includes('bangalore')));
 
 const post = {
   platform: 'reddit',
-  post_title: 'Looking for IVF clinic recommendations in Bangalore?',
-  post_body: 'Has anyone had a good experience with egg freezing consultations?',
+  post_title: 'Looking for the best trusted IVF clinic recommendations in Bangalore?',
+  post_body: "I'm worried and struggling to choose. Has anyone had a good experience with egg freezing consultations, and what did it cost?",
   score: 9,
   num_comments: 6
 };
@@ -37,7 +37,7 @@ assert(score >= 65, `expected hot score, got ${score}`);
 const enriched = enrichPost(post, workspace, 'ivf recommendation bangalore');
 assert.strictEqual(enriched.quality, 'hot');
 assert.strictEqual(enriched.is_question, true);
-assert(enriched.pain_point.includes('Looking for IVF'));
+assert(enriched.pain_point.includes('best trusted IVF'));
 assert.strictEqual(scorePost({ post_title: 'IVF jobs in Bangalore', post_body: '' }, workspace), 0);
 
 const ddg = parseDuckDuckGoHtml(`

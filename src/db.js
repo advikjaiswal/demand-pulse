@@ -102,11 +102,46 @@ async function initDb() {
       created_at TIMESTAMP,
       scraped_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       status TEXT DEFAULT 'new',
+      topic_score INTEGER DEFAULT 0,
+      pain_score INTEGER DEFAULT 0,
+      buyer_intent_score INTEGER DEFAULT 0,
+      content_value_score INTEGER DEFAULT 0,
+      engagement_score INTEGER DEFAULT 0,
+      freshness_score INTEGER DEFAULT 0,
+      spam_noise_score INTEGER DEFAULT 0,
+      post_type TEXT,
+      is_best BOOLEAN DEFAULT false,
+      intent TEXT,
+      audience_segment TEXT,
+      funnel_stage TEXT,
+      service_match TEXT,
+      content_angle TEXT,
+      recommended_format TEXT,
+      cta TEXT,
+      confidence INTEGER DEFAULT 0,
       UNIQUE(workspace_id, platform, platform_id)
     )
   `;
+  await sql`ALTER TABLE prospects ADD COLUMN IF NOT EXISTS topic_score INTEGER DEFAULT 0`;
+  await sql`ALTER TABLE prospects ADD COLUMN IF NOT EXISTS pain_score INTEGER DEFAULT 0`;
+  await sql`ALTER TABLE prospects ADD COLUMN IF NOT EXISTS buyer_intent_score INTEGER DEFAULT 0`;
+  await sql`ALTER TABLE prospects ADD COLUMN IF NOT EXISTS content_value_score INTEGER DEFAULT 0`;
+  await sql`ALTER TABLE prospects ADD COLUMN IF NOT EXISTS engagement_score INTEGER DEFAULT 0`;
+  await sql`ALTER TABLE prospects ADD COLUMN IF NOT EXISTS freshness_score INTEGER DEFAULT 0`;
+  await sql`ALTER TABLE prospects ADD COLUMN IF NOT EXISTS spam_noise_score INTEGER DEFAULT 0`;
+  await sql`ALTER TABLE prospects ADD COLUMN IF NOT EXISTS post_type TEXT`;
+  await sql`ALTER TABLE prospects ADD COLUMN IF NOT EXISTS is_best BOOLEAN DEFAULT false`;
+  await sql`ALTER TABLE prospects ADD COLUMN IF NOT EXISTS intent TEXT`;
+  await sql`ALTER TABLE prospects ADD COLUMN IF NOT EXISTS audience_segment TEXT`;
+  await sql`ALTER TABLE prospects ADD COLUMN IF NOT EXISTS funnel_stage TEXT`;
+  await sql`ALTER TABLE prospects ADD COLUMN IF NOT EXISTS service_match TEXT`;
+  await sql`ALTER TABLE prospects ADD COLUMN IF NOT EXISTS content_angle TEXT`;
+  await sql`ALTER TABLE prospects ADD COLUMN IF NOT EXISTS recommended_format TEXT`;
+  await sql`ALTER TABLE prospects ADD COLUMN IF NOT EXISTS cta TEXT`;
+  await sql`ALTER TABLE prospects ADD COLUMN IF NOT EXISTS confidence INTEGER DEFAULT 0`;
   await sql`CREATE INDEX IF NOT EXISTS idx_prospects_workspace ON prospects(workspace_id, scraped_at DESC)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_prospects_topic ON prospects(workspace_id, topic)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_prospects_best ON prospects(workspace_id, is_best, relevance DESC)`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS content_items (
@@ -134,11 +169,17 @@ async function initDb() {
       user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
       workspace_id INTEGER REFERENCES workspaces(id) ON DELETE SET NULL,
       rating INTEGER,
+      target_type TEXT,
+      target_id INTEGER,
+      label TEXT,
       message TEXT NOT NULL,
       page TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `;
+  await sql`ALTER TABLE feedback ADD COLUMN IF NOT EXISTS target_type TEXT`;
+  await sql`ALTER TABLE feedback ADD COLUMN IF NOT EXISTS target_id INTEGER`;
+  await sql`ALTER TABLE feedback ADD COLUMN IF NOT EXISTS label TEXT`;
 }
 
 async function saveBetaSignup(input) {
@@ -237,14 +278,43 @@ async function getScanRuns(workspace_id, limit = 10) {
 
 async function saveProspect(workspace_id, p) {
   const rows = await sql`
-    INSERT INTO prospects (workspace_id, platform, platform_id, username, profile_url, post_url, post_title, post_body, score, num_comments, relevance, quality, keyword, topic, is_question, pain_point, created_at)
-    VALUES (${workspace_id}, ${p.platform}, ${p.platform_id}, ${p.username || null}, ${p.profile_url || null}, ${p.post_url}, ${p.post_title || null}, ${p.post_body || null}, ${p.score || 0}, ${p.num_comments || 0}, ${p.relevance || 0}, ${p.quality || 'cold'}, ${p.keyword || null}, ${p.topic || null}, ${p.is_question || false}, ${p.pain_point || null}, ${p.created_at || null})
+    INSERT INTO prospects (
+      workspace_id, platform, platform_id, username, profile_url, post_url, post_title, post_body,
+      score, num_comments, relevance, quality, keyword, topic, is_question, pain_point, created_at,
+      topic_score, pain_score, buyer_intent_score, content_value_score, engagement_score,
+      freshness_score, spam_noise_score, post_type, is_best, intent, audience_segment,
+      funnel_stage, service_match, content_angle, recommended_format, cta, confidence
+    )
+    VALUES (
+      ${workspace_id}, ${p.platform}, ${p.platform_id}, ${p.username || null}, ${p.profile_url || null}, ${p.post_url}, ${p.post_title || null}, ${p.post_body || null},
+      ${p.score || 0}, ${p.num_comments || 0}, ${p.relevance || 0}, ${p.quality || 'cold'}, ${p.keyword || null}, ${p.topic || null}, ${p.is_question || false}, ${p.pain_point || null}, ${p.created_at || null},
+      ${p.topic_score || 0}, ${p.pain_score || 0}, ${p.buyer_intent_score || 0}, ${p.content_value_score || 0}, ${p.engagement_score || 0},
+      ${p.freshness_score || 0}, ${p.spam_noise_score || 0}, ${p.post_type || null}, ${p.is_best || false}, ${p.intent || null}, ${p.audience_segment || null},
+      ${p.funnel_stage || null}, ${p.service_match || null}, ${p.content_angle || null}, ${p.recommended_format || null}, ${p.cta || null}, ${p.confidence || 0}
+    )
     ON CONFLICT (workspace_id, platform, platform_id) DO UPDATE SET
       relevance = GREATEST(prospects.relevance, EXCLUDED.relevance),
       quality = CASE WHEN EXCLUDED.relevance > prospects.relevance THEN EXCLUDED.quality ELSE prospects.quality END,
       topic = COALESCE(EXCLUDED.topic, prospects.topic),
       is_question = prospects.is_question OR EXCLUDED.is_question,
-      pain_point = COALESCE(EXCLUDED.pain_point, prospects.pain_point)
+      pain_point = COALESCE(EXCLUDED.pain_point, prospects.pain_point),
+      topic_score = GREATEST(prospects.topic_score, EXCLUDED.topic_score),
+      pain_score = GREATEST(prospects.pain_score, EXCLUDED.pain_score),
+      buyer_intent_score = GREATEST(prospects.buyer_intent_score, EXCLUDED.buyer_intent_score),
+      content_value_score = GREATEST(prospects.content_value_score, EXCLUDED.content_value_score),
+      engagement_score = GREATEST(prospects.engagement_score, EXCLUDED.engagement_score),
+      freshness_score = GREATEST(prospects.freshness_score, EXCLUDED.freshness_score),
+      spam_noise_score = COALESCE(LEAST(NULLIF(prospects.spam_noise_score, 0), EXCLUDED.spam_noise_score), EXCLUDED.spam_noise_score, prospects.spam_noise_score),
+      post_type = COALESCE(EXCLUDED.post_type, prospects.post_type),
+      is_best = prospects.is_best OR EXCLUDED.is_best,
+      intent = COALESCE(EXCLUDED.intent, prospects.intent),
+      audience_segment = COALESCE(EXCLUDED.audience_segment, prospects.audience_segment),
+      funnel_stage = COALESCE(EXCLUDED.funnel_stage, prospects.funnel_stage),
+      service_match = COALESCE(EXCLUDED.service_match, prospects.service_match),
+      content_angle = COALESCE(EXCLUDED.content_angle, prospects.content_angle),
+      recommended_format = COALESCE(EXCLUDED.recommended_format, prospects.recommended_format),
+      cta = COALESCE(EXCLUDED.cta, prospects.cta),
+      confidence = GREATEST(prospects.confidence, EXCLUDED.confidence)
     RETURNING id
   `;
   return rows[0];
@@ -255,22 +325,28 @@ async function getTopics(workspace_id, { days = 14, minRelevance = 15 } = {}) {
     SELECT COALESCE(topic, 'general') AS topic, COUNT(*)::int AS count,
       COUNT(*) FILTER (WHERE is_question)::int AS question_count,
       ROUND(AVG(relevance))::int AS avg_relevance, MAX(relevance)::int AS max_relevance,
+      ROUND(AVG(pain_score))::int AS emotional_intensity,
+      ROUND(AVG(buyer_intent_score))::int AS buyer_intent_level,
+      SUM(COALESCE(num_comments, 0) + COALESCE(score, 0))::int AS total_engagement,
+      (array_agg(COALESCE(pain_point, post_title) ORDER BY relevance DESC))[1] AS best_repeated_question,
+      (array_agg(COALESCE(content_angle, post_title) ORDER BY content_value_score DESC))[1] AS best_content_angle,
       array_agg(DISTINCT platform) AS platforms, MAX(scraped_at) AS last_seen
     FROM prospects
-    WHERE workspace_id=${workspace_id} AND scraped_at > NOW() - (${days}::int || ' days')::interval AND relevance >= ${minRelevance}
+    WHERE workspace_id=${workspace_id} AND is_best = true AND scraped_at > NOW() - (${days}::int || ' days')::interval AND relevance >= ${minRelevance}
     GROUP BY topic
     ORDER BY count DESC, avg_relevance DESC
   `;
 }
 
-async function getProspects(workspace_id, { topic = null, quality = null, days = 14, limit = 100 } = {}) {
+async function getProspects(workspace_id, { topic = null, quality = null, days = 14, limit = 100, bestOnly = true } = {}) {
+  const bestFilter = bestOnly ? sql`AND is_best = true` : sql``;
   if (topic) {
-    return await sql`SELECT * FROM prospects WHERE workspace_id=${workspace_id} AND topic=${topic} AND scraped_at > NOW() - (${days}::int || ' days')::interval ORDER BY relevance DESC, scraped_at DESC LIMIT ${limit}`;
+    return await sql`SELECT * FROM prospects WHERE workspace_id=${workspace_id} AND topic=${topic} ${bestFilter} AND scraped_at > NOW() - (${days}::int || ' days')::interval ORDER BY relevance DESC, scraped_at DESC LIMIT ${limit}`;
   }
   if (quality) {
-    return await sql`SELECT * FROM prospects WHERE workspace_id=${workspace_id} AND quality=${quality} AND scraped_at > NOW() - (${days}::int || ' days')::interval ORDER BY relevance DESC, scraped_at DESC LIMIT ${limit}`;
+    return await sql`SELECT * FROM prospects WHERE workspace_id=${workspace_id} AND quality=${quality} ${bestFilter} AND scraped_at > NOW() - (${days}::int || ' days')::interval ORDER BY relevance DESC, scraped_at DESC LIMIT ${limit}`;
   }
-  return await sql`SELECT * FROM prospects WHERE workspace_id=${workspace_id} AND scraped_at > NOW() - (${days}::int || ' days')::interval ORDER BY relevance DESC, scraped_at DESC LIMIT ${limit}`;
+  return await sql`SELECT * FROM prospects WHERE workspace_id=${workspace_id} ${bestFilter} AND scraped_at > NOW() - (${days}::int || ' days')::interval ORDER BY relevance DESC, scraped_at DESC LIMIT ${limit}`;
 }
 
 async function saveContentItem(workspace_id, item) {
@@ -300,8 +376,21 @@ async function deleteContentItem(workspace_id, id) {
 }
 
 async function saveFeedback(input) {
-  const rows = await sql`INSERT INTO feedback (user_id, workspace_id, rating, message, page) VALUES (${input.user_id}, ${input.workspace_id || null}, ${input.rating || null}, ${input.message}, ${input.page || null}) RETURNING *`;
+  const rows = await sql`
+    INSERT INTO feedback (user_id, workspace_id, rating, target_type, target_id, label, message, page)
+    VALUES (${input.user_id}, ${input.workspace_id || null}, ${input.rating || null}, ${input.target_type || null}, ${input.target_id || null}, ${input.label || null}, ${input.message}, ${input.page || null})
+    RETURNING *
+  `;
   return rows[0];
+}
+
+async function getFeedbackAdjustments(workspace_id) {
+  return await sql`
+    SELECT label, target_type, target_id, COUNT(*)::int AS count
+    FROM feedback
+    WHERE workspace_id = ${workspace_id}
+    GROUP BY label, target_type, target_id
+  `;
 }
 
 module.exports = {
@@ -309,5 +398,5 @@ module.exports = {
   createUser, getUserByEmail, createSession, getSession, touchSession, revokeSession,
   createWorkspace, updateWorkspace, getWorkspaces, getWorkspace,
   createScanRun, finishScanRun, getScanRuns, saveProspect, getTopics, getProspects,
-  saveContentItem, getContentItems, updateContentItem, deleteContentItem, saveFeedback
+  saveContentItem, getContentItems, updateContentItem, deleteContentItem, saveFeedback, getFeedbackAdjustments
 };
