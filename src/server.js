@@ -6,6 +6,7 @@ const auth = require('./auth');
 const db = require('./db');
 const { parseWorkspace } = require('./keywords');
 const { runScan } = require('./scanner');
+const entitlements = require('./entitlements');
 
 const app = express();
 app.use(cors());
@@ -28,7 +29,25 @@ function betaOpen() {
 }
 
 function publicUser(user) {
-  return { id: user.id, name: user.name, email: user.email, role: user.role || 'user' };
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role || 'user',
+    plan: user.plan || 'founder_free',
+    founder_number: user.founder_number || null,
+    plan_label: entitlements.planLabel(user)
+  };
+}
+
+function isAdmin(user) {
+  const admins = String(process.env.DEMAND_ADMIN_EMAILS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  return user?.role === 'admin' || admins.includes(String(user?.email || '').toLowerCase());
+}
+
+function requireAdmin(req, res, next) {
+  if (!isAdmin(req.user)) return res.status(403).json({ error: 'Admin access required' });
+  next();
 }
 
 async function requireAuth(req, res, next) {
@@ -40,7 +59,14 @@ async function requireAuth(req, res, next) {
   if (!session) return res.status(401).json({ error: 'Unauthorized' });
   await db.touchSession(token_hash).catch(() => {});
   req.tokenHash = token_hash;
-  req.user = { id: session.user_id, name: session.name, email: session.email, role: session.role || 'user' };
+  req.user = {
+    id: session.user_id,
+    name: session.name,
+    email: session.email,
+    role: session.role || 'user',
+    plan: session.plan || 'founder_free',
+    founder_number: session.founder_number || null
+  };
   next();
 }
 
@@ -164,7 +190,9 @@ app.post('/api/register', async (req, res) => {
     if (!name) return res.status(400).json({ error: 'Name required' });
     if (!email || !email.includes('@')) return res.status(400).json({ error: 'Valid email required' });
     if (await db.getUserByEmail(email)) return res.status(409).json({ error: 'Account already exists. Please sign in.' });
-    const user = await db.createUser({ name, email, password_hash: auth.hashPassword(password) });
+    const founder_number = entitlements.founderNumberFor(await db.countFounderUsers());
+    const plan = entitlements.planForFounderNumber(founder_number);
+    const user = await db.createUser({ name, email, password_hash: auth.hashPassword(password), plan, founder_number });
     const token = auth.createSessionToken();
     await db.createSession({ user_id: user.id, token_hash: auth.hashToken(token), ip: clientIp(req), user_agent: req.headers['user-agent'] || '' });
     res.json({ ok: true, token, user: publicUser(user) });
@@ -190,7 +218,11 @@ app.post('/api/logout', requireAuth, async (req, res) => {
 });
 
 app.get('/api/me', requireAuth, async (req, res) => {
-  res.json({ ok: true, user: req.user, workspaces: await db.getWorkspaces(req.user.id) });
+  const scansUsed = await db.countUserScansSince(req.user.id, new Date(Date.now() - 30 * 86400000));
+  const scanAccess = entitlements.canRunScan(req.user, scansUsed);
+  const user = publicUser(req.user);
+  if (isAdmin(req.user)) user.role = 'admin';
+  res.json({ ok: true, user, workspaces: await db.getWorkspaces(req.user.id), usage: { scans_30d: scansUsed, scan_limit: entitlements.FREE_SCAN_LIMIT, scan_access: scanAccess } });
 });
 
 app.post('/api/workspaces', requireAuth, async (req, res) => {
@@ -231,8 +263,15 @@ app.get('/api/workspaces/:workspaceId/overview', requireAuth, loadWorkspace, asy
 });
 
 app.post('/api/workspaces/:workspaceId/scan', requireAuth, loadWorkspace, async (req, res) => {
+  const scansUsed = await db.countUserScansSince(req.user.id, new Date(Date.now() - 30 * 86400000));
+  const access = entitlements.canRunScan(req.user, scansUsed);
+  if (!access.ok) return res.status(402).json({ error: access.reason || 'Scan limit reached', access });
   res.json({ ok: true, message: 'Demand scan started' });
   runScan(req.workspace.id).catch(err => console.error('[scan]', err.message));
+});
+
+app.get('/api/admin/overview', requireAuth, requireAdmin, async (_req, res) => {
+  res.json(await db.getAdminOverview());
 });
 
 app.get('/api/workspaces/:workspaceId/prospects', requireAuth, loadWorkspace, async (req, res) => {

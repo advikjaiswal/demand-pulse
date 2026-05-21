@@ -3,6 +3,7 @@ const { hashPassword, verifyPassword, normalizeEmail } = require('../src/auth');
 const { parseWorkspace, buildQueries } = require('../src/keywords');
 const { scorePost, enrichPost } = require('../src/score');
 const { parseDuckDuckGoHtml } = require('../src/sources');
+const { founderNumberFor, planForFounderNumber, canRunScan } = require('../src/entitlements');
 
 const hash = hashPassword('correct horse battery staple');
 assert(verifyPassword('correct horse battery staple', hash));
@@ -49,5 +50,14 @@ const ddg = parseDuckDuckGoHtml(`
 assert.strictEqual(ddg.length, 1);
 assert.strictEqual(ddg[0].url, 'https://www.quora.com/How-do-I-choose-an-IVF-clinic');
 assert(ddg[0].title.includes('IVF clinic'));
+
+assert.strictEqual(founderNumberFor(0), 1);
+assert.strictEqual(founderNumberFor(49), 50);
+assert.strictEqual(founderNumberFor(50), null);
+assert.strictEqual(planForFounderNumber(7), 'founder_free');
+assert.strictEqual(planForFounderNumber(null), 'payment_pending');
+assert.strictEqual(canRunScan({ plan: 'founder_free' }, 0).ok, true);
+assert.strictEqual(canRunScan({ plan: 'founder_free' }, 25).ok, false);
+assert.strictEqual(canRunScan({ plan: 'payment_pending' }, 0).ok, false);
 
 console.log('core tests passed');

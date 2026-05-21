@@ -30,10 +30,15 @@ async function initDb() {
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       role TEXT DEFAULT 'user',
+      plan TEXT DEFAULT 'founder_free',
+      founder_number INTEGER,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS plan TEXT DEFAULT 'founder_free'`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS founder_number INTEGER`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_users_plan ON users(plan, founder_number)`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS sessions (
@@ -191,8 +196,17 @@ async function saveBetaSignup(input) {
   return rows[0];
 }
 
-async function createUser({ name, email, password_hash }) {
-  const rows = await sql`INSERT INTO users (name, email, password_hash) VALUES (${name}, ${email}, ${password_hash}) RETURNING id, name, email, role, created_at`;
+async function countFounderUsers() {
+  const rows = await sql`SELECT COUNT(*)::int AS count FROM users WHERE plan = 'founder_free'`;
+  return rows[0]?.count || 0;
+}
+
+async function createUser({ name, email, password_hash, plan = 'founder_free', founder_number = null }) {
+  const rows = await sql`
+    INSERT INTO users (name, email, password_hash, plan, founder_number)
+    VALUES (${name}, ${email}, ${password_hash}, ${plan}, ${founder_number})
+    RETURNING id, name, email, role, plan, founder_number, created_at
+  `;
   return rows[0];
 }
 
@@ -208,7 +222,7 @@ async function createSession({ user_id, token_hash, ip = null, user_agent = null
 
 async function getSession(token_hash) {
   const rows = await sql`
-    SELECT s.*, u.name, u.email, u.role FROM sessions s
+    SELECT s.*, u.name, u.email, u.role, u.plan, u.founder_number FROM sessions s
     JOIN users u ON u.id = s.user_id
     WHERE s.token_hash = ${token_hash} AND s.revoked = false
     LIMIT 1
@@ -274,6 +288,16 @@ async function finishScanRun(id, fields) {
 
 async function getScanRuns(workspace_id, limit = 10) {
   return await sql`SELECT * FROM scan_runs WHERE workspace_id=${workspace_id} ORDER BY started_at DESC LIMIT ${limit}`;
+}
+
+async function countUserScansSince(user_id, since) {
+  const rows = await sql`
+    SELECT COUNT(*)::int AS count
+    FROM scan_runs sr
+    JOIN workspaces w ON w.id = sr.workspace_id
+    WHERE w.user_id = ${user_id} AND sr.started_at >= ${since}
+  `;
+  return rows[0]?.count || 0;
 }
 
 async function saveProspect(workspace_id, p) {
@@ -394,10 +418,48 @@ async function getFeedbackAdjustments(workspace_id) {
   `;
 }
 
+async function getAdminOverview() {
+  const [userStats, signupStats, scanStats, users, feedback] = await Promise.all([
+    sql`SELECT COUNT(*)::int AS total_users, COUNT(*) FILTER (WHERE plan='founder_free')::int AS founder_users, COUNT(*) FILTER (WHERE plan='payment_pending')::int AS pending_users FROM users`,
+    sql`SELECT COUNT(*)::int AS beta_signups FROM beta_signups`,
+    sql`SELECT COUNT(*)::int AS total_scans, COALESCE(SUM(saved),0)::int AS saved_results FROM scan_runs`,
+    sql`
+      SELECT u.id, u.name, u.email, u.role, u.plan, u.founder_number, u.created_at,
+        COUNT(DISTINCT w.id)::int AS workspaces,
+        COUNT(DISTINCT sr.id)::int AS scans,
+        MAX(sr.started_at) AS last_scan
+      FROM users u
+      LEFT JOIN workspaces w ON w.user_id = u.id
+      LEFT JOIN scan_runs sr ON sr.workspace_id = w.id
+      GROUP BY u.id
+      ORDER BY u.created_at DESC
+      LIMIT 50
+    `,
+    sql`
+      SELECT f.id, f.rating, f.label, f.message, f.page, f.created_at, u.email, w.name AS workspace
+      FROM feedback f
+      LEFT JOIN users u ON u.id = f.user_id
+      LEFT JOIN workspaces w ON w.id = f.workspace_id
+      ORDER BY f.created_at DESC
+      LIMIT 50
+    `
+  ]);
+  return {
+    stats: {
+      ...(userStats[0] || {}),
+      ...(signupStats[0] || {}),
+      ...(scanStats[0] || {})
+    },
+    users,
+    feedback
+  };
+}
+
 module.exports = {
   sql, initDb, saveBetaSignup,
-  createUser, getUserByEmail, createSession, getSession, touchSession, revokeSession,
+  countFounderUsers, createUser, getUserByEmail, createSession, getSession, touchSession, revokeSession,
   createWorkspace, updateWorkspace, getWorkspaces, getWorkspace,
-  createScanRun, finishScanRun, getScanRuns, saveProspect, getTopics, getProspects,
-  saveContentItem, getContentItems, updateContentItem, deleteContentItem, saveFeedback, getFeedbackAdjustments
+  createScanRun, finishScanRun, getScanRuns, countUserScansSince, saveProspect, getTopics, getProspects,
+  saveContentItem, getContentItems, updateContentItem, deleteContentItem, saveFeedback, getFeedbackAdjustments,
+  getAdminOverview
 };
