@@ -1,13 +1,14 @@
 const { buildQueries } = require('./keywords');
 const { enrichPost } = require('./score');
-const { searchReddit, searchWebPlatform, sleep } = require('./sources');
+const { searchReddit, searchWebPlatform, searchWeb, sleep } = require('./sources');
 const db = require('./db');
 
-const QUERY_LIMIT = parseInt(process.env.DEMAND_QUERIES_PER_SCAN || '8', 10);
-const MIN_RELEVANCE = parseInt(process.env.DEMAND_MIN_RELEVANCE || '18', 10);
+const QUERY_LIMIT = parseInt(process.env.DEMAND_QUERIES_PER_SCAN || '6', 10);
+const MIN_RELEVANCE = parseInt(process.env.DEMAND_MIN_RELEVANCE || '0', 10);
 
 async function collect(source, query) {
   if (source === 'reddit') return searchReddit(query);
+  if (source === 'web') return searchWeb(query);
   return searchWebPlatform(source, query);
 }
 
@@ -20,7 +21,7 @@ async function runScan(workspaceId, { queryLimit = QUERY_LIMIT, minRelevance = M
   try {
     const queries = buildQueries(workspace, { limit: queryLimit });
     const feedback = await db.getFeedbackAdjustments(workspace.id).catch(() => []);
-    const sources = ['reddit', 'x', 'quora', 'facebook'];
+    const sources = ['reddit', 'quora', 'web', 'x', 'facebook'];
     for (const source of sources) {
       out.source_counts[source] = 0;
       for (const query of queries) {
@@ -29,7 +30,7 @@ async function runScan(workspaceId, { queryLimit = QUERY_LIMIT, minRelevance = M
           out.found += posts.length;
           for (const post of posts) {
             const enriched = applyFeedback(enrichPost(post, workspace, query), feedback);
-            if (enriched.relevance < minRelevance) {
+            if (enriched.spam_noise_score >= 65 || enriched.relevance < minRelevance) {
               out.skipped++;
               continue;
             }
@@ -41,31 +42,6 @@ async function runScan(workspaceId, { queryLimit = QUERY_LIMIT, minRelevance = M
         } catch (err) {
           out.errors.push({ source, query, message: err.message });
         }
-      }
-    }
-    if (out.saved === 0) {
-      out.source_counts.starter = 0;
-      for (const post of starterPosts(workspace)) {
-        const enriched = {
-          ...enrichPost(post, workspace, 'starter demand map'),
-          relevance: 58,
-          quality: 'warm',
-          pain_score: 55,
-          buyer_intent_score: 52,
-          content_value_score: 70,
-          spam_noise_score: 0,
-          post_type: 'starter_opportunity',
-          is_best: true,
-          intent: 'Starter research direction',
-          funnel_stage: 'Awareness',
-          content_angle: post.post_title,
-          recommended_format: 'Blog + Reel + Search Answer',
-          cta: `Offer a simple next step for ${workspace.services?.[0] || workspace.niche || 'this problem'}`,
-          confidence: 58
-        };
-        await db.saveProspect(workspace.id, enriched);
-        out.saved++;
-        out.source_counts.starter++;
       }
     }
     return db.finishScanRun(run.id, { status: 'completed', ...out });
@@ -93,27 +69,6 @@ function applyFeedback(post, feedback) {
     quality: relevance >= 65 ? 'hot' : relevance >= 35 ? 'warm' : 'cold',
     is_best: post.is_best && relevance >= 30
   };
-}
-
-function starterPosts(workspace) {
-  const niche = workspace.niche || workspace.business_type || 'this market';
-  const services = workspace.services?.length ? workspace.services.slice(0, 3) : [niche];
-  const geography = workspace.geography ? ` ${workspace.geography}` : '';
-  return services.map((service, index) => {
-    const query = encodeURIComponent(`problems with ${service}${geography}`);
-    return {
-      platform: 'starter',
-      platform_id: `starter-${workspace.id}-${index}-${String(service).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-      username: null,
-      profile_url: null,
-      post_url: `https://www.google.com/search?q=${query}`,
-      post_title: `What problems are people having with ${service}?`,
-      post_body: `No strong public posts were saved yet, so Demand Pulse created this starter research direction from your workspace. Use the source link to inspect live search demand, then run another scan with more specific services or a geography.`,
-      score: 0,
-      num_comments: 0,
-      created_at: new Date().toISOString()
-    };
-  });
 }
 
 module.exports = { runScan };

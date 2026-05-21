@@ -170,4 +170,9 @@ async function searchWebPlatform(platform, query) {
   return results.map(r => resultToProspect(r, platform)).filter(Boolean);
 }
 
-module.exports = { sleep, searchReddit, searchWebPlatform, parseDuckDuckGoHtml };
+async function searchWeb(query) {
+  const results = await webSearch(query, { count: 10 });
+  return results.map(r => resultToProspect(r, 'web')).filter(Boolean);
+}
+
+module.exports = { sleep, searchReddit, searchWebPlatform, searchWeb, parseDuckDuckGoHtml };
