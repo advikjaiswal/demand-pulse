@@ -21,11 +21,12 @@
     .row { display:grid; grid-template-columns:1fr 72px; gap:12px; align-items:center; border:1px solid var(--line); padding:13px; border-radius:7px; margin-bottom:12px; }
     .row b { font-size:14px; } .row small { color:var(--muted); display:block; margin-top:3px; } .score { color:var(--accent); font-weight:850; text-align:right; }
     section { padding:70px 0; border-top:1px solid var(--line); } h2 { font-size:34px; margin:0 0 18px; }
-    .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; } .card { background:#fff; border:1px solid var(--line); border-radius:8px; padding:20px; }
+    .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; } .demo-grid { grid-template-columns:repeat(4,1fr); }
+    .card { background:#fff; border:1px solid var(--line); border-radius:8px; padding:20px; }
     .card h3 { margin:0 0 8px; font-size:18px; } .card p, p.muted { margin:0; color:var(--muted); line-height:1.5; }
     form { display:grid; gap:10px; margin-top:14px; } input, textarea { width:100%; border:1px solid var(--line); border-radius:7px; padding:12px; font:inherit; background:var(--paper); }
     textarea { min-height:86px; resize:vertical; } .msg { min-height:20px; color:var(--accent); font-size:14px; }
-    @media (max-width:860px) { .hero, .grid { grid-template-columns:1fr; } }
+    @media (max-width:860px) { .hero, .grid, .demo-grid { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
@@ -38,7 +39,7 @@
       <div>
         <h1>Know what your buyers are asking before you publish.</h1>
         <p class="lead">Demand Pulse scans Reddit, Quora, X, Facebook, and search for real audience questions, clusters them by pain point, and turns them into a weekly content calendar.</p>
-        <div style="display:flex;gap:12px;flex-wrap:wrap"><a class="btn" href="#beta">Get free beta access</a><a class="btn alt" href="/app">Open app</a></div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap"><a class="btn" href="/app?demo=agency">Explore demo</a><a class="btn alt" href="/app">Try your business</a></div>
         <div class="proof"><span class="pill">Real source posts</span><span class="pill">Topic clusters</span><span class="pill">Content ideas</span><span class="pill">Free beta</span></div>
       </div>
       <div class="panel">
@@ -48,6 +49,16 @@
         <p class="muted">Each cluster links back to source posts and can become a blog, reel, short, answer, or LinkedIn post.</p>
       </div>
     </div>
+    <section>
+      <h2>Explore ready-made workflows</h2>
+      <p class="muted" style="margin-bottom:18px">Open a live-feeling Demand Pulse dashboard before creating an account.</p>
+      <div class="grid demo-grid">
+        <a class="card" href="/app?demo=agency" style="text-decoration:none;color:inherit"><h3>Local marketing agency</h3><p>Find local SEO, Google profile, and lead-generation pain.</p></a>
+        <a class="card" href="/app?demo=career" style="text-decoration:none;color:inherit"><h3>Career coach</h3><p>See resume, job search, and career transition demand.</p></a>
+        <a class="card" href="/app?demo=clinic" style="text-decoration:none;color:inherit"><h3>IVF clinic</h3><p>Understand patient trust, pricing, and consultation questions.</p></a>
+        <a class="card" href="/app?demo=consultant" style="text-decoration:none;color:inherit"><h3>B2B sales consultant</h3><p>Surface pipeline, outbound, and sales process problems.</p></a>
+      </div>
+    </section>
     <section>
       <h2>What beta users get</h2>
       <div class="grid">
