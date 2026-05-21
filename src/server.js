@@ -207,18 +207,26 @@ app.put('/api/workspaces/:workspaceId', requireAuth, loadWorkspace, async (req, 
 
 app.get('/api/workspaces/:workspaceId/overview', requireAuth, loadWorkspace, async (req, res) => {
   const days = parseInt(req.query.days, 10) || 14;
-  const [topics, prospects, calendar, scans] = await Promise.all([
+  let [topics, prospects, calendar, scans] = await Promise.all([
     db.getTopics(req.workspace.id, { days }),
     db.getProspects(req.workspace.id, { days, limit: 30 }),
     db.getContentItems(req.workspace.id, { limit: 100 }),
     db.getScanRuns(req.workspace.id, 5)
   ]);
+  const curated = prospects.length > 0;
+  if (!curated) {
+    [topics, prospects] = await Promise.all([
+      db.getTopics(req.workspace.id, { days: 30, minRelevance: 10, bestOnly: false }),
+      db.getProspects(req.workspace.id, { days: 30, limit: 30, bestOnly: false })
+    ]);
+  }
   res.json({
     workspace: req.workspace,
     topics: topics.map(enrichCluster),
     prospects,
     calendar,
-    scans
+    scans,
+    curated
   });
 });
 

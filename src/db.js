@@ -320,7 +320,8 @@ async function saveProspect(workspace_id, p) {
   return rows[0];
 }
 
-async function getTopics(workspace_id, { days = 14, minRelevance = 15 } = {}) {
+async function getTopics(workspace_id, { days = 14, minRelevance = 15, bestOnly = true } = {}) {
+  const bestFilter = bestOnly ? sql`AND is_best = true` : sql``;
   return await sql`
     SELECT COALESCE(topic, 'general') AS topic, COUNT(*)::int AS count,
       COUNT(*) FILTER (WHERE is_question)::int AS question_count,
@@ -332,7 +333,7 @@ async function getTopics(workspace_id, { days = 14, minRelevance = 15 } = {}) {
       (array_agg(COALESCE(content_angle, post_title) ORDER BY content_value_score DESC))[1] AS best_content_angle,
       array_agg(DISTINCT platform) AS platforms, MAX(scraped_at) AS last_seen
     FROM prospects
-    WHERE workspace_id=${workspace_id} AND is_best = true AND scraped_at > NOW() - (${days}::int || ' days')::interval AND relevance >= ${minRelevance}
+    WHERE workspace_id=${workspace_id} ${bestFilter} AND scraped_at > NOW() - (${days}::int || ' days')::interval AND relevance >= ${minRelevance}
     GROUP BY topic
     ORDER BY count DESC, avg_relevance DESC
   `;
